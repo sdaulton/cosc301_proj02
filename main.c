@@ -164,19 +164,22 @@ char*** cl_creator(char* buffer) {
 }
 
 int main(int argc, char **argv) {
-	/*over = false; // Checks whether the shell is ready to finish running.
+	bool over = false; // Checks whether the shell is ready to finish running.
+    printf("Welcome to the terminal! \n");
     while (!over) {
     	printf("$: ");
     	fflush(stdout);
     	char buffer[1024];
     	while (fgets(buffer, 1024, stdin) != NULL) {
-    		// Command line processing.	
+    		char ***cl = NULL;
+    		cl = cl_creator(buffer);
+    		free_triple_tokens(cl);	
     	}
     }
 
     return 0;
-    */
-
+    
+    /*
     char test[] = "/path; /path -o -o; ; ; /path2 -l -r; ;/path";
     char ***cl = NULL;
     cl = cl_creator(test);
@@ -187,8 +190,6 @@ int main(int argc, char **argv) {
     	print_tokens(cl[i]);
     	i++;
     }
-
-    free_triple_tokens(cl);
-
+    */
 }
 

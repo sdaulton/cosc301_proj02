@@ -61,14 +61,36 @@ char** tokenify(const char *s, int indicator) {
     }
 }
 
-void free_tokens(char **tokens) {
+void free_tokens(char **tokens, int len) {
     // Taken from Lab 2, code by Professor Sommers.
+    // Modified to suit our needs. If len is passed in as -1, it means
+    // we don't know the len.
     int i = 0;
-    while (tokens[i] != NULL) {
-        free(tokens[i]); // free each string
-        i++;
+
+    if (len > 0) {
+    	while (i < len) {
+        	free(tokens[i]); // free each string
+       		i++;
+    	}
+    	free(tokens); // then free the array
     }
-    free(tokens); // then free the array
+    else {
+    	while (tokens[i] != NULL) {
+    		free(tokens[i]);
+    		i++;
+    	}
+    	free(tokens);
+    }
+}
+
+// To free the CL.
+void free_triple_tokens(char ***tokens) {
+	int i = 0;
+	while (tokens[i] != NULL) {
+		free_tokens(tokens[i], -1);
+		i++;
+	}
+	free(tokens);
 }
 
 // Code by Professor Sommers, only here now for testing purposes.
@@ -119,8 +141,8 @@ char*** cl_creator(char* buffer) {
 		i++;
 	}
 
-	char ***cl = malloc(sizeof(char***) * command_count);
-	
+	char ***cl = malloc(command_count * sizeof(char**));
+
 	int j = 0;
 	int k = 0; // j = tracker for untoked, k = write index
 
@@ -135,7 +157,8 @@ char*** cl_creator(char* buffer) {
 		k++;
 	}
 	
-	cl[j] = NULL;
+	cl[k] = NULL;
+	free_tokens(untoked_cl, orig_len);
 	return cl;
 
 }
@@ -154,9 +177,9 @@ int main(int argc, char **argv) {
     return 0;
     */
 
-    char test[] = "/path; /path -o -o; ; ; # /path2 -l -r; ;/path";
-    char ***cl = cl_creator(test);
-
+    char test[] = "/path; /path -o -o; ; ; /path2 -l -r; ;/path";
+    char ***cl = NULL;
+    cl = cl_creator(test);
 
     int i = 0;
     while (cl[i] != NULL) {
@@ -164,5 +187,8 @@ int main(int argc, char **argv) {
     	print_tokens(cl[i]);
     	i++;
     }
+
+    free_triple_tokens(cl);
+
 }
 

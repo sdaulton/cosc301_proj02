@@ -64,7 +64,8 @@ char** tokenify(const char *s, int indicator) {
 void free_tokens(char **tokens, int len) {
     // Taken from Lab 2, code by Professor Sommers.
     // Modified to suit our needs. If len is passed in as -1, it means
-    // we don't know the len.
+    // we don't know the len. Len is used for when the cl_creator function
+    // has an array where some slots are filled with NULL.
     int i = 0;
 
     if (len > 0) {
@@ -84,13 +85,15 @@ void free_tokens(char **tokens, int len) {
 }
 
 // To free the CL.
-void free_triple_tokens(char ***tokens) {
+void free_cl(char ***cl) {
 	int i = 0;
-	while (tokens[i] != NULL) {
-		free_tokens(tokens[i], -1);
+	while (cl[i] != NULL) {
+		free_tokens(cl[i], -1);
 		i++;
 	}
-	free(tokens);
+	free(cl[i]);
+	free(cl);
+	return;
 }
 
 // Code by Professor Sommers, only here now for testing purposes.
@@ -100,6 +103,7 @@ void print_tokens(char *tokens[]) {
         printf("Token #%d:%s \n", i, tokens[i]);
         i++;
     }
+    return;
 }
 
 void comment_handler(char* buffer) {
@@ -122,7 +126,7 @@ char*** cl_creator(char* buffer) {
 	char **untoked_cl = tokenify(buffer, 1);
 	int i = 0;
 	int orig_len = 0;
-	int command_count = 2;
+	int command_count = 2; // Accounts for sandwiching the semicolon & NULL term
 	while (untoked_cl[i] != NULL) {
 		orig_len++;
 		bool allspace = true;
@@ -135,8 +139,12 @@ char*** cl_creator(char* buffer) {
 		if (!allspace) {
 			command_count++;
 		}
-		else {
-			untoked_cl[i] = NULL;
+		else { // Is this really necessary?
+			char *p = NULL;
+			char *x = NULL;
+			x = untoked_cl[i];
+			untoked_cl[i] = p;
+			free(x);
 		}
 		i++;
 	}
@@ -164,6 +172,8 @@ char*** cl_creator(char* buffer) {
 }
 
 int main(int argc, char **argv) {
+	
+	/*
 	bool over = false; // Checks whether the shell is ready to finish running.
     printf("Welcome to the terminal! \n");
     while (!over) {
@@ -173,24 +183,24 @@ int main(int argc, char **argv) {
     	while (fgets(buffer, 1024, stdin) != NULL) {
     		char ***cl = NULL;
     		cl = cl_creator(buffer);
-    		free_triple_tokens(cl);	
+    		free_cl(cl);	
     	}
     }
 
     return 0;
+    */
+
     
-    
-    /*
-    char test[] = "/path; /path -o -o; ; ; /path2 -l -r; ;/path";
+    char test[] = " /path; /path -o -o; ; ; /path2 -l -r; ;/path";
     char ***cl = NULL;
     cl = cl_creator(test);
-
     int i = 0;
     while (cl[i] != NULL) {
     	printf("This is argument %d! \n", i);
     	print_tokens(cl[i]);
     	i++;
     }
-    */
+
+    free_cl(cl);
 }
 

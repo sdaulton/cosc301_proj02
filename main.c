@@ -137,7 +137,8 @@ char*** cl_creator(char* buffer) {
 		if (!allspace) {
 			command_count++;
 		}
-		else { // Is this really necessary?
+		else { // Necessary because free() on a NULL pointer does nothing
+			   // so this step allows this block to be freed properly.
 			char *p = NULL; 
 			char *x = NULL;
 			x = untoked_cl[i];

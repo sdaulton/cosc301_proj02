@@ -36,7 +36,7 @@ char** tokenify(const char *s, int indicator) {
             count++;   
         }
 
-        char** finished = malloc((count+1) * sizeof(char*)); // Account for final null slot.
+        char** finished = malloc((count+1) * sizeof(char*)); // Account for final null slot
         char *p = strtok(temp2, delim);
         char *p2 = strdup(p);
         finished[0] = p2;
@@ -124,9 +124,7 @@ char*** cl_creator(char* buffer) {
 	// but it works.
 	comment_handler(buffer);
 	char **untoked_cl = tokenify(buffer, 1);
-	int i = 0;
-	int orig_len = 0;
-	int command_count = 2; // Accounts for sandwiching the semicolon & NULL term
+	int i = 0, orig_len = 0, command_count = 2; // Accounts for sandwiching the semicolon & NULL term
 	while (untoked_cl[i] != NULL) {
 		orig_len++;
 		bool allspace = true;
@@ -140,7 +138,7 @@ char*** cl_creator(char* buffer) {
 			command_count++;
 		}
 		else { // Is this really necessary?
-			char *p = NULL;
+			char *p = NULL; 
 			char *x = NULL;
 			x = untoked_cl[i];
 			untoked_cl[i] = p;
@@ -151,8 +149,7 @@ char*** cl_creator(char* buffer) {
 
 	char ***cl = malloc(command_count * sizeof(char**));
 
-	int j = 0;
-	int k = 0; // j = tracker for untoked, k = write index
+	int j = 0, k = 0; // j = tracker for untoked, k = write index
 
 	while (j < orig_len) {
 		if (untoked_cl[j] == NULL) {

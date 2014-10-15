@@ -12,9 +12,8 @@
 #include <signal.h>
 #include <stdbool.h>
 #include <errno.h>
+#include "list.c" // Linked list functionality from Bria Vicenti's project 1
 
-// SAM - If you have a better / more efficient / less ugly
-// tokenify please feel free to replace this one!
 char** tokenify(const char *s, int indicator) {
     // Taken from lab 2, code by Bria Vicenti
     // Will return an array of char pointers (strings) or an array with one char pointer pointing to NULL if no tokens are present. 
@@ -90,7 +89,6 @@ void free_cl(char ***cl) {
 		free_tokens(cl[i], -1);
 		i++;
 	}
-	free(cl[i]);
 	free(cl);
 	return;
 }
@@ -126,9 +124,8 @@ char*** cl_creator(char* buffer) {
 	int i = 0, orig_len = 0, command_count = 2; // Accounts for sandwiching the semicolon & NULL term
 	while (untoked_cl[i] != NULL) {
 		orig_len++;
-		
-                // check if command i is just whitespace
-                bool allspace = true;
+        bool allspace = true;
+        // check if command i is just whitespace
 		for (int n = 0; n < strlen(untoked_cl[i]); n++) {
 			if (!isspace(untoked_cl[i][n])) {
 				allspace = false;
@@ -170,16 +167,55 @@ char*** cl_creator(char* buffer) {
 
 }
 
+struct node* path_list(FILE *input) {
+    // Some code borrowed from Bria's proj01 for processing data.
+    struct node *list = NULL;
+    char line[128] = {'\0'};
+    while (fgets(line, 128, input) != NULL) {
+        line[strlen(line) - 1] = '\0'; // Clears the newline char.
+        int check = list_append(line, &list);
+        if (check < 0) {
+            return NULL;
+        }
+    }
+    return list;
+}
+
+// Finds, completes, and returns the full path.
+char* path_finder(char *cmd, struct node *list) {
+    struct stat statresult;
+    int rv = stat(cmd, &statresult);
+    if (rv < 0) {
+        while (list != NULL) {
+            char test[strlen(cmd) + strlen(list -> path)];
+            strcpy(test, list-> path);
+            strcat(test, "/");
+            strcat(test, cmd);
+            printf("Path being tested: %s\n", test);
+            rv = stat(test, &statresult);
+            if (rv >= 0) {
+                printf("Path found: %s\n", test);
+                return test;
+            }
+            list = list -> next;
+        }
+        printf("Error: Path for command \"%s\" not found. \n", cmd);
+        return NULL;
+    }
+    else {
+        return cmd;
+    }
+}
+
 int mode_cmd(char **cmd, int *p_mode) {
     //Executes the mode command in the current process
     //Either returns the mode for the next input line or prints out the current mode, depending on the arguments passed
     if (cmd[1] == NULL) {
         // no arguments --> print current mode
-        
         if (*p_mode == 0) {
-            printf("Current Execution Mode: sequential\n");
+            printf("Current Execution Mode: Sequential\n");
         } else {
-            printf("Current Execution Mode: parallel\n");
+            printf("Current Execution Mode: Parallel\n");
         }
     } else if ((strcmp(cmd[1], "s") == 0) || (strcmp(cmd[1], "sequential") == 0)) {
         // set mode to sequential
@@ -195,7 +231,7 @@ int mode_cmd(char **cmd, int *p_mode) {
     return *p_mode;
 }
 
-int run_cmds(char ***cl, int *p_mode) {
+int run_cmds(char ***cl, int *p_mode, struct node* process_list) {
     // Runs the commands from the input line
     // For system commands, this method forks the current process and runs the specified command in the child process
     // It then exits the child process
@@ -206,10 +242,7 @@ int run_cmds(char ***cl, int *p_mode) {
     // returns 1 if the shell should exit after executing the commands (i.e. a exit command was encountered)
     // returns 0 otherwise
     // Uses some code from Lab 3 (Sam Daulton)
-    if (*p_mode == 1) {
-        // parallel mode
-        //***
-    }
+
     char **cmd = NULL;
     int status = 0;
     int i = 0;
@@ -230,6 +263,18 @@ int run_cmds(char ***cl, int *p_mode) {
             }
         } else{
             // System command
+            char* temp = NULL;
+            temp = path_finder(cmd[0], process_list);
+            if (temp == NULL) {
+                i++;
+                continue;
+            }
+            else {
+                char* x = cmd[0];
+                cmd[0] = temp;
+                free(x);
+            } 
+
             num_children++;
             pid_t pid = fork();
             if (pid == 0) {
@@ -245,7 +290,7 @@ int run_cmds(char ***cl, int *p_mode) {
                 num_children--;
             }else if (*p_mode == 0) {
                 // sequential mode: wait for child to finish
-                    wait(&status);
+                wait(&status);
             }
         }
         i++;
@@ -274,6 +319,17 @@ int main(int argc, char **argv) {
     char prompt[] = "$: ";
     char ***cl = NULL;
     char buffer[1024];
+
+    FILE *datafile = fopen("shell-config", "r");
+    if (datafile == NULL) {
+        printf("Error: Cannot find shell-config. Please use full path names only!\n");
+
+    }
+
+    struct node *process_list;
+    process_list = path_list(datafile);
+
+
     // print shell prompt
     printf("%s", prompt);
     fflush(stdout);
@@ -281,7 +337,7 @@ int main(int argc, char **argv) {
     // while not EOF, continue running shell
     while (fgets(buffer, 1024, stdin) != NULL) {
         cl = cl_creator(buffer);
-        will_exit = run_cmds(cl, &mode);
+        will_exit = run_cmds(cl, &mode, process_list);
         free_cl(cl);
         if(will_exit == 1) {
             break;

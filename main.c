@@ -11,12 +11,13 @@
 #include <poll.h>
 #include <signal.h>
 #include <stdbool.h>
+#include <errno.h>
 
 // SAM - If you have a better / more efficient / less ugly
 // tokenify please feel free to replace this one!
 char** tokenify(const char *s, int indicator) {
     // Taken from lab 2, code by Bria Vicenti
-    // Will return a char array with one NULL element if no tokens are present. 
+    // Will return an array of char pointers (strings) or an array with one char pointer pointing to NULL if no tokens are present. 
     char *temp = strdup(s);
     char* delim = NULL;
 
@@ -37,25 +38,23 @@ char** tokenify(const char *s, int indicator) {
         }
 
         char** finished = malloc((count+1) * sizeof(char*)); // Account for final null slot
-        char *p = strtok(temp2, delim);
-        char *p2 = strdup(p);
-        finished[0] = p2;
-
-        for (int i = 1; i < count; i++) {
-            p = strtok(NULL, delim);
-            p2 = strdup(p);
-            finished[i] = p2;
+        char *next = strtok(temp2, delim);
+        int i = 0;
+        while (next != NULL) {
+            finished[i] = strdup(next);
+            next = strtok(NULL, delim);
+            i++;
         }
-
+        
         finished[count] = NULL;
         free(temp);
         free(temp2);
         return finished;
     }
     else {
-        char** finished = malloc(sizeof(char*));
-        char *p = NULL;
-        finished[0] = p;
+        char** finished = malloc(sizeof(char *));
+        char *next = NULL;
+        finished[0] = next;
         free(temp);
         return finished;
     }
@@ -127,21 +126,25 @@ char*** cl_creator(char* buffer) {
 	int i = 0, orig_len = 0, command_count = 2; // Accounts for sandwiching the semicolon & NULL term
 	while (untoked_cl[i] != NULL) {
 		orig_len++;
-		bool allspace = true;
+		
+                // check if command i is just whitespace
+                bool allspace = true;
 		for (int n = 0; n < strlen(untoked_cl[i]); n++) {
 			if (!isspace(untoked_cl[i][n])) {
 				allspace = false;
 				break;
 			}
 		}
+                
+                // command i is not just whitespace
 		if (!allspace) {
 			command_count++;
 		}
+                //command i is just whitespace
 		else { // Necessary because free() on a NULL pointer does nothing
 			   // so this step allows this block to be freed properly.
 			char *p = NULL; 
-			char *x = NULL;
-			x = untoked_cl[i];
+			char *x = untoked_cl[i];
 			untoked_cl[i] = p;
 			free(x);
 		}
@@ -151,14 +154,12 @@ char*** cl_creator(char* buffer) {
 	char ***cl = malloc(command_count * sizeof(char**));
 
 	int j = 0, k = 0; // j = tracker for untoked, k = write index
-
 	while (j < orig_len) {
 		if (untoked_cl[j] == NULL) {
 			j++;
 			continue;
 		}
-		char **temp = tokenify(untoked_cl[j], 0);
-		cl[k] = temp;
+		cl[k] = tokenify(untoked_cl[j], 0);
 		j++;
 		k++;
 	}
@@ -169,36 +170,130 @@ char*** cl_creator(char* buffer) {
 
 }
 
+int mode_cmd(char **cmd, int *p_mode) {
+    //Executes the mode command in the current process
+    //Either returns the mode for the next input line or prints out the current mode, depending on the arguments passed
+    if (cmd[1] == NULL) {
+        // no arguments --> print current mode
+        
+        if (*p_mode == 0) {
+            printf("Current Execution Mode: sequential\n");
+        } else {
+            printf("Current Execution Mode: parallel\n");
+        }
+    } else if ((strcmp(cmd[1], "s") == 0) || (strcmp(cmd[1], "sequential") == 0)) {
+        // set mode to sequential
+        return 0;
+    } else if ((strcmp(cmd[1], "p") == 0) || (strcmp(cmd[1], "parallel") == 0)) {
+        //set mode to parallel
+        return 1;
+    } else {
+        // invalid argument
+        fprintf(stderr, "Invalid argument for mode command\n");
+        exit(1);
+    }
+    return *p_mode;
+}
+
+int run_cmds(char ***cl, int *p_mode) {
+    // Runs the commands from the input line
+    // For system commands, this method forks the current process and runs the specified command in the child process
+    // It then exits the child process
+    // For built-in shell commands, this method runs the command in the main shell process
+    // If the shell is in sequential mode, the parent waits for the child to finish
+    // If the shell is in parallel, no waits are used (i.e. as soon as the parent is run, another fork can be called if the
+    // next command is a system call.
+    // returns 1 if the shell should exit after executing the commands (i.e. a exit command was encountered)
+    // returns 0 otherwise
+    // Uses some code from Lab 3 (Sam Daulton)
+    if (*p_mode == 1) {
+        // parallel mode
+        //***
+    }
+    char **cmd = NULL;
+    int status = 0;
+    int i = 0;
+    int new_mode = *p_mode;
+    int ret_val = 0;
+    int num_children = 0;
+    while (cl[i] != NULL) {
+        cmd = cl[i];
+        if (strcmp(cmd[0],"mode") == 0) {
+            // mode
+            new_mode = mode_cmd(cmd, p_mode);
+        } else if (strcmp(cmd[0], "exit") == 0) {
+            if (cmd[1] == NULL) {
+                // exit
+                ret_val = 1;
+            } else {
+                fprintf(stderr, "Invalid argument for exit command\n");
+            }
+        } else{
+            // System command
+            num_children++;
+            pid_t pid = fork();
+            if (pid == 0) {
+                // child process running
+                if (execv(cmd[0], cmd) < 0) {
+                    //execv failed, print error and exit
+                    fprintf(stderr, "execv failed on command: %s\nReason: %s\n", cmd[0], strerror(errno));
+                    exit(1);
+                }
+            } else if (pid == -1) {
+                // fork failed
+                fprintf(stderr, "fork failed. command: %s not executed.\nReason: %s\n", cmd[0], strerror(errno));
+                num_children--;
+            }else if (*p_mode == 0) {
+                // sequential mode: wait for child to finish
+                    wait(&status);
+            }
+        }
+        i++;
+    }
+    
+    if (*p_mode == 1){
+        // parallel mode
+        // wait for all children to finish executing before printing shell prompt
+        int j = 0;
+        while (j < num_children) {
+            wait(&status);
+            j++;
+        }
+    }
+
+    //update mode for next input line
+    *p_mode = new_mode;
+    return ret_val;
+}
+
 int main(int argc, char **argv) {
 	
-	/*
-	bool over = false; // Checks whether the shell is ready to finish running.
+    int mode  = 0; // int indicating the current mode: 0 means sequential, 1 means parallel
+    int will_exit = 0;  // int indicating if the shell should exit 0 means don't exit, 1 means exit
     printf("Welcome to the terminal! \n");
-    while (!over) {
-    	printf("$: ");
-    	fflush(stdout);
-    	char buffer[1024];
-    	while (fgets(buffer, 1024, stdin) != NULL) {
-    		char ***cl = NULL;
-    		cl = cl_creator(buffer);
-    		free_cl(cl);	
-    	}
-    }
-
-    return 0;
-    */
-
-    
-    char test[] = " /path; /path -o -o; ; ; /path2 -l -r; ;/path";
+    char prompt[] = "$: ";
     char ***cl = NULL;
-    cl = cl_creator(test);
-    int i = 0;
-    while (cl[i] != NULL) {
-    	printf("This is argument %d! \n", i);
-    	print_tokens(cl[i]);
-    	i++;
+    char buffer[1024];
+    // print shell prompt
+    printf("%s", prompt);
+    fflush(stdout);
+    
+    // while not EOF, continue running shell
+    while (fgets(buffer, 1024, stdin) != NULL) {
+        cl = cl_creator(buffer);
+        will_exit = run_cmds(cl, &mode);
+        free_cl(cl);
+        if(will_exit == 1) {
+            break;
+        }
+        
+        printf("%s", prompt);
+        fflush(stdout);
+        
     }
-
-    free_cl(cl);
+    if (will_exit != 1) {
+        printf("\n"); // just to make smooth transition out of our shell if EOF
+    }
+    return 0;
 }
 

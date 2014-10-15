@@ -350,6 +350,8 @@ int main(int argc, char **argv) {
     if (will_exit != 1) {
         printf("\n"); // just to make smooth transition out of our shell if EOF
     }
+
+    list_clear(process_list);
     return 0;
 }
 

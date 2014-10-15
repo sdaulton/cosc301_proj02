@@ -320,12 +320,11 @@ int main(int argc, char **argv) {
     char ***cl = NULL;
     char buffer[1024];
 
+    // create list of paths to check for each system command
     FILE *datafile = fopen("shell-config", "r");
     if (datafile == NULL) {
         printf("Error: Cannot find shell-config. Please use full path names only!\n");
-
     }
-
     struct node *process_list;
     process_list = path_list(datafile);
 

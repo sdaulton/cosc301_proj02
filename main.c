@@ -181,29 +181,30 @@ struct node* path_list(FILE *input) {
     return list;
 }
 
-// Finds, completes, and returns the full path.
+// Finds, completes, and returns the full path or copies & returns the command
+// if it either already works or doesn't exist.
 char* path_finder(char *cmd, struct node *list) {
     struct stat statresult;
     int rv = stat(cmd, &statresult);
-    if (rv < 0) {
+    if (rv < 0) { 
         while (list != NULL) {
-            char test[strlen(cmd) + strlen(list -> path)];
+            char* test = malloc(strlen(cmd) + strlen(list -> path) + 2);
             strcpy(test, list-> path);
             strcat(test, "/");
             strcat(test, cmd);
-            printf("Path being tested: %s\n", test);
             rv = stat(test, &statresult);
             if (rv >= 0) {
-                printf("Path found: %s\n", test);
                 return test;
             }
             list = list -> next;
+            free(test);
         }
-        printf("Error: Path for command \"%s\" not found. \n", cmd);
-        return NULL;
+        char* test = strdup(cmd);
+        return test;
     }
     else {
-        return cmd;
+        char* test = strdup(cmd);
+        return test;
     }
 }
 
@@ -217,10 +218,10 @@ int mode_cmd(char **cmd, int *p_mode) {
         } else {
             printf("Current Execution Mode: Parallel\n");
         }
-    } else if ((strcmp(cmd[1], "s") == 0) || (strcmp(cmd[1], "sequential") == 0)) {
+    } else if ((strcasecmp(cmd[1], "s") == 0) || (strcasecmp(cmd[1], "sequential") == 0)) {
         // set mode to sequential
         return 0;
-    } else if ((strcmp(cmd[1], "p") == 0) || (strcmp(cmd[1], "parallel") == 0)) {
+    } else if ((strcasecmp(cmd[1], "p") == 0) || (strcasecmp(cmd[1], "parallel") == 0)) {
         //set mode to parallel
         return 1;
     } else {
@@ -251,10 +252,10 @@ int run_cmds(char ***cl, int *p_mode, struct node* process_list) {
     int num_children = 0;
     while (cl[i] != NULL) {
         cmd = cl[i];
-        if (strcmp(cmd[0],"mode") == 0) {
+        if (strcasecmp(cmd[0],"mode") == 0) {
             // mode
             new_mode = mode_cmd(cmd, p_mode);
-        } else if (strcmp(cmd[0], "exit") == 0) {
+        } else if (strcasecmp(cmd[0], "exit") == 0) {
             if (cmd[1] == NULL) {
                 // exit
                 ret_val = 1;
@@ -263,18 +264,12 @@ int run_cmds(char ***cl, int *p_mode, struct node* process_list) {
             }
         } else{
             // System command
-            char* temp = NULL;
-            temp = path_finder(cmd[0], process_list);
-            if (temp == NULL) {
-                i++;
-                continue;
-            }
-            else {
-                char* x = cmd[0];
-                cmd[0] = temp;
-                free(x);
-            } 
-
+            char* temp = path_finder(cmd[0], process_list);
+            printf("temp is: %s\n", temp);
+            char* x = cmd[0];
+            cmd[0] = temp;
+            free(x);
+            
             num_children++;
             pid_t pid = fork();
             if (pid == 0) {
@@ -350,6 +345,7 @@ int main(int argc, char **argv) {
         printf("\n"); // just to make smooth transition out of our shell if EOF
     }
 
+    fclose(datafile);
     list_clear(process_list);
     return 0;
 }

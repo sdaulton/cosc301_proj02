@@ -182,7 +182,7 @@ struct node* path_list(FILE *input) {
 }
 
 // Finds, completes, and returns the full path or copies & returns the command
-// if it either already works or doesn't exist.
+// if it either already works or doesn't exist. Returns a pointer to a new string regardless.
 char* path_finder(char *cmd, struct node *list) {
     struct stat statresult;
     int rv = stat(cmd, &statresult);
@@ -265,11 +265,10 @@ int run_cmds(char ***cl, int *p_mode, struct node* process_list) {
         } else{
             // System command
             char* temp = path_finder(cmd[0], process_list);
-            printf("temp is: %s\n", temp);
             char* x = cmd[0];
             cmd[0] = temp;
             free(x);
-            
+
             num_children++;
             pid_t pid = fork();
             if (pid == 0) {

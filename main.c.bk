@@ -12,7 +12,7 @@
 #include <signal.h>
 #include <stdbool.h>
 #include <errno.h>
-#include "list.h" // Linked list of strings functionality from Bria Vicenti's project 1, and linked list of pids (Sam Daulton)
+#include "list.c" // Linked list functionality from Bria Vicenti's project 1
 
 char** tokenify(const char *s, int indicator) {
     // Taken from lab 2, code by Bria Vicenti
@@ -167,7 +167,7 @@ char*** cl_creator(char* buffer) {
 
 }
 
-struct node* path_list_creater(FILE *input) {
+struct node* path_list(FILE *input) {
     // Some code borrowed from Bria's proj01 for processing data.
     struct node *list = NULL;
     char line[128] = {'\0'};
@@ -232,7 +232,7 @@ int mode_cmd(char **cmd, int *p_mode) {
     return *p_mode;
 }
 
-int run_cmds(char ***cl, int *p_mode, struct node *path_list, struct pid_node **process_list) {
+int run_cmds(char ***cl, int *p_mode, struct node* process_list) {
     // Runs the commands from the input line
     // For system commands, this method forks the current process and runs the specified command in the child process
     // It then exits the child process
@@ -243,6 +243,7 @@ int run_cmds(char ***cl, int *p_mode, struct node *path_list, struct pid_node **
     // returns 1 if the shell should exit after executing the commands (i.e. a exit command was encountered)
     // returns 0 otherwise
     // Uses some code from Lab 3 (Sam Daulton)
+
     char **cmd = NULL;
     int status = 0;
     int i = 0;
@@ -252,75 +253,18 @@ int run_cmds(char ***cl, int *p_mode, struct node *path_list, struct pid_node **
     while (cl[i] != NULL) {
         cmd = cl[i];
         if (strcasecmp(cmd[0],"mode") == 0) {
-            // MODE
+            // mode
             new_mode = mode_cmd(cmd, p_mode);
         } else if (strcasecmp(cmd[0], "exit") == 0) {
             if (cmd[1] == NULL) {
-                // EXIT
-                if (*process_list != NULL) {
-                    printf("Other processes are currently running.  Cannot exit terminal.\n");
-                    i++;
-                    break;
-                } else {
-                    ret_val = 1;
-                }
+                // exit
+                ret_val = 1;
             } else {
                 fprintf(stderr, "Invalid argument for exit command\n");
             }
-        } else if (strcasecmp(cmd[0], "jobs") == 0) {
-            // JOBS
-            if (cmd[1] == NULL) {
-                // jobs
-                if (*process_list == NULL) {
-                    printf("There are no processes currently running.\n");
-                    i++;
-                    break;
-                }
-            pid_list_print(process_list);
-            } else {
-                fprintf(stderr, "Invalid argument for jobs command\n");
-            }
-        } else if (strcasecmp(cmd[0], "pause") == 0) {
-            // PAUSE
-            if (cmd[1] == NULL) {
-                fprintf(stderr, "Need PID as argument for pause command\n");
-                if (*process_list == NULL) {
-                    printf("There are no processes currently.  Cannot pause\n");
-                }
-                i++;
-                break;
-            } else if (cmd[2] != NULL) {
-                fprintf(stderr, "Only one argument (PID) accepted by pause command\n");
-            } else {
-                //try to pause
-                if (pid_list_update(atoi(cmd[1]), process_list, 1) == -1) {
-                    printf("Process %d does not exist\n", atoi(cmd[1]));
-                } else {
-                    kill(atoi(cmd[1]), SIGSTOP);
-                }
-            }
-        } else if (strcasecmp(cmd[0], "resume") == 0) {
-            // RESUME
-            if (cmd[1] == NULL) {
-                fprintf(stderr, "Need PID as argument for resume command\n");
-                if (*process_list == NULL) {
-                    printf("There are no processes currently.  Cannot resume\n");
-                }
-                i++;
-                break;
-            } else if (cmd[2] != NULL) {
-                fprintf(stderr, "Only one argument (PID) accepted by the resume command\n");
-            } else {
-                //try to resume
-                if (pid_list_update(atoi(cmd[1]), process_list, 2) == -1) {
-                    printf("Process %d does not exist\n", atoi(cmd[1]));
-                } else {
-                    kill(atoi(cmd[1]), SIGCONT);
-                }
-            }
-        } else {
+        } else{
             // System command
-            char* temp = path_finder(cmd[0], path_list);
+            char* temp = path_finder(cmd[0], process_list);
             char* x = cmd[0];
             cmd[0] = temp;
             free(x);
@@ -331,31 +275,21 @@ int run_cmds(char ***cl, int *p_mode, struct node *path_list, struct pid_node **
                 // child process running
                 if (execv(cmd[0], cmd) < 0) {
                     //execv failed, print error and exit
-                    fprintf(stderr, "\nexecv failed on command: %s\nReason: %s\n", cmd[0], strerror(errno));
-                    printf("$: ");
-                    fflush(stdout);
+                    fprintf(stderr, "execv failed on command: %s\nReason: %s\n", cmd[0], strerror(errno));
                     exit(1);
                 }
             } else if (pid == -1) {
                 // fork failed
-                fprintf(stderr, "\nfork failed. command: %s not executed.\nReason: %s\n", cmd[0], strerror(errno));
+                fprintf(stderr, "fork failed. command: %s not executed.\nReason: %s\n", cmd[0], strerror(errno));
                 num_children--;
-            } else if (*p_mode == 0) {
+            }else if (*p_mode == 0) {
                 // sequential mode: wait for child to finish
-                pid_t wait_rv = wait(&status);
-                if (wait_rv == -1) {
-                    fprintf(stderr, "\nwait failed on command: %s\nReason: %s\n", cmd[0], strerror(errno));
-                }
-            } else {
-                // parallel mode:
-                //NEED TO CONCAT ENTIRE COMMAND
-                printf("Process: %d added to process_list\n", pid);
-                pid_list_append(pid, cmd[0], process_list);
+                wait(&status);
             }
         }
         i++;
     }
-    /*
+    
     if (*p_mode == 1){
         // parallel mode
         // wait for all children to finish executing before printing shell prompt
@@ -365,7 +299,6 @@ int run_cmds(char ***cl, int *p_mode, struct node *path_list, struct pid_node **
             j++;
         }
     }
-    */
 
     //update mode for next input line
     *p_mode = new_mode;
@@ -386,85 +319,33 @@ int main(int argc, char **argv) {
     if (datafile == NULL) {
         printf("Error: Cannot find shell-config. Please use full path names only!\n");
     }
-    struct node *path_list;
-    path_list = path_list_creater(datafile);
+    struct node *process_list;
+    process_list = path_list(datafile);
 
-    struct pid_node *process_list = NULL;
 
     // print shell prompt
     printf("%s", prompt);
     fflush(stdout);
-    int status = 0;
-    pid_t pid = 0;
-    struct pollfd pfd[1];
-    pfd[0].fd = 0;
-    pfd[0].events = POLLIN;
-    pfd[0].revents = 0;
-    int poll_rv = 0;
-
     
     // while not EOF, continue running shell
     while (fgets(buffer, 1024, stdin) != NULL) {
         cl = cl_creator(buffer);
-        will_exit = run_cmds(cl, &mode, path_list, &process_list);
+        will_exit = run_cmds(cl, &mode, process_list);
         free_cl(cl);
-        if (will_exit == 1) {
+        if(will_exit == 1) {
             break;
         }
-
+        
         printf("%s", prompt);
         fflush(stdout);
-        while (process_list != NULL) {
-            for (int i = 0; i < 10; i++) {
-                pid = waitpid(-1, &status, WNOHANG);
-                if (pid == -1) {
-                    //waitpid failed
-                    fprintf(stderr, "\nwaitpid failed\nReason: %s\n", strerror(errno));
-                } else if (pid > 0) {
-                    //waitpid returned a pid --> a process has terminated
-                    printf("\n");
-                    if (WIFCONTINUED(status)) {
-                        pid_list_update(pid, &process_list, 2);
-                    } else if (WIFSTOPPED(status)) {
-                        pid_list_update(pid, &process_list, 1);
-                    }
-                    pid_list_update(pid, &process_list, 0);
-                    printf("%s", prompt);
-                    fflush(stdout);
-                    if (process_list == NULL) {    
-                        break;
-                    }
-                } else {
-                    //printf("no state change\n");
-                }
-            }
-            poll_rv = poll(&pfd[0], 1, 1000);
-            if (poll_rv < 0) {
-                fprintf(stderr, "\npoll failed\nReason: %s\n", strerror(errno));
-            } else if (poll_rv == 0) {
-                //printf("timeout\n");
-            } else {
-                //printf("\ntyped something on stdin\n");
-                if (fgets(buffer, 1024, stdin) != NULL) {
-                    cl = cl_creator(buffer);
-                    run_cmds(cl, &mode, path_list, &process_list);
-                    free_cl(cl);
-                } else {
-                    // typed EOF
-                    printf("\nOther processes are currently running.  Cannot exit terminal.\n");
-                }
-                printf("%s", prompt);
-                fflush(stdout);
-            }
-
-        }
         
     }
     if (will_exit != 1) {
         printf("\n"); // just to make smooth transition out of our shell if EOF
     }
+
     fclose(datafile);
-    list_clear(path_list);
+    list_clear(process_list);
     return 0;
 }
 

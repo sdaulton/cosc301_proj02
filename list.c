@@ -48,7 +48,11 @@ void list_clear(struct node *list) {
 }
 
 int pid_list_append(const pid_t cpid, const char *cmd, struct pid_node **head) {
-    // Returns -1 on failure.
+    // takes a pid_t pid, string command name, and pointer to a pointer to a
+    // linked list of struct pid_nodes
+    // appends a new struct pid_node with pid set to cpid
+    // and command set to cmd to the end of the list
+    // Returns -1 on failure, 0 on success
     struct pid_node *temp = malloc(sizeof(struct pid_node));
     if (temp == NULL) {
     	printf("Error: Malloc failed!");
@@ -72,62 +76,15 @@ int pid_list_append(const pid_t cpid, const char *cmd, struct pid_node **head) {
 }
 
 void pid_list_print(struct pid_node **head) {
-    	/*
-        int status = 0;
-        bool terminated = false;
-        pid_t wait_rv = 0;
-        */
-        struct pid_node *next_node = *head;
-        /*
-        del_list[num_pids] = 5 // number of pids that can be stored in initial array
-	pid_t *del_list = malloc((num_pids + 1) * sizeof(pid_t)); // an array with the pids of 
-	pid_t *new_del_list = NULL; // just in case array needs resizing
-	del_list[0] = 0; // storing actual number of pids in array in del_pids[0]
-	int i = 1;
-	if (i >= num_pids + 1) {
-    	// need to resize array
-       	// create new array that can store twice as many tokens
-        new_del_list = malloc((2 * num_pids + 1) * sizeof(pid_t));
-        for (int j = 0; j < num_tokens+1; j++) {
-            new_del_list[j] = del_list[j];
-        }
-        free(del_list);
-        del_list = new_del_list;
-        num_pids *= 2;
-	}
-        */
-	
-	printf("***Current Processes start***\n");
-	while (next_node != NULL) {
-		/*
-                wait_rv = waitpid(next_node->pid, &status, WUNTRACED | WCONTINUED | WNOHANG);
-		if (wait_rv == -1) {
-		    // error in waitpid
-		    fprintf(stderr, "Error calling waitpid on process with pid: %d\n", next_node->pid);
-		} else if (wait_rv > 0){
-                    //process was terminated
-                    //should we worry about processes not terminating cleanly?
-                    terminated = true;
-		} else {
-                    if (WIFCONTINUED(status)) {
-                        strncpy(next_node->state, "Running", 8);
-                    } else if (WIFSTOPPED(status)) {
-                        strncpy(next_node->state, "Paused", 8);
-                    }
-                    printf("Process: %d\tCommand: %s\tStatus: %s\n", next_node->pid, next_node->cmd, next_node->state);
-                }
-                */
-                printf("Process: %d\tCommand: %s\tStatus: %s\n", next_node->pid, next_node->cmd, next_node->state);
-		next_node = next_node -> next;
-                /*
-                if (terminated) {
-                    //delete pid from list
-                    pid_list_update(wait_rv, head, 0);
-                }
-                terminated = false;
-                */
-	}
-	printf("***Current Processes end***\n");
+    // takes a pointer to a ponter to the head of a linked list of struct pid_nodes
+    // and prints the pid, command name, and status of that process
+    struct pid_node *next_node = *head;
+    printf("***Current Processes start***\n");
+    while (next_node != NULL) {
+        printf("Process: %d\tCommand: %s\tStatus: %s\n", next_node->pid, next_node->cmd, next_node->state);
+        next_node = next_node -> next;
+    }
+    printf("***Current Processes end***\n");
 }
 
 void pid_list_clear(struct pid_node *list) {
@@ -140,6 +97,14 @@ void pid_list_clear(struct pid_node *list) {
 }
 
 int pid_list_update(pid_t search_pid, struct pid_node **head, int update_code) {
+    // Takes the pid of the process to update, a pointer to a pointer to the head of linked list
+    // of struct pid_nodes, and an update code as parameters
+    // and performs the update specified by the update code.
+    // Update codes: 0 --> pid terminated (delete from list)
+    //               1 --> pid paused (change status to paused)
+    //               2 --> pid resumed (change status to running)
+    // returns 0 if the process with pid was in the list and was updated
+    // returns -1 if the process with pid was not in the list
     struct pid_node *next_node = *head;
     struct pid_node *current = *head;
     int is_head = 1;  //indicates if next_node the head of the list

@@ -114,6 +114,12 @@ void comment_handler(char* buffer) {
 	return;
 }
 
+void print_prompt() {
+    // prints the command line prompt
+    printf("$: ");
+    fflush(stdout);
+}
+
 char*** cl_creator(char* buffer) {
 	// "Command list creator"
 	// Creates an array of arrays of strings to handle multiple commands.
@@ -211,23 +217,20 @@ char* path_finder(char *cmd, struct node *list) {
 int mode_cmd(char **cmd, int *p_mode) {
     //Executes the mode command in the current process
     //Either returns the mode for the next input line or prints out the current mode, depending on the arguments passed
-    if (cmd[1] == NULL) {
-        // no arguments --> print current mode
-        if (*p_mode == 0) {
-            printf("Current Execution Mode: Sequential\n");
-        } else {
-            printf("Current Execution Mode: Parallel\n");
+    if (cmd[1] != NULL) {
+        if ((strcasecmp(cmd[1], "s") == 0) || (strcasecmp(cmd[1], "sequential") == 0)) {
+            // set mode to sequential
+            return 0;
+        } else if ((strcasecmp(cmd[1], "p") == 0) || (strcasecmp(cmd[1], "parallel") == 0)) {
+            //set mode to parallel
+            return 1;
         }
-    } else if ((strcasecmp(cmd[1], "s") == 0) || (strcasecmp(cmd[1], "sequential") == 0)) {
-        // set mode to sequential
-        return 0;
-    } else if ((strcasecmp(cmd[1], "p") == 0) || (strcasecmp(cmd[1], "parallel") == 0)) {
-        //set mode to parallel
-        return 1;
+    }
+    // no valid arguments --> print current mode
+    if (*p_mode == 0) {
+        printf("Current Execution Mode: Sequential\n");
     } else {
-        // invalid argument
-        fprintf(stderr, "Invalid argument for mode command\n");
-        exit(1);
+        printf("Current Execution Mode: Parallel\n");
     }
     return *p_mode;
 }
@@ -239,10 +242,11 @@ int run_cmds(char ***cl, int *p_mode, struct node *path_list, struct pid_node **
     // For built-in shell commands, this method runs the command in the main shell process
     // If the shell is in sequential mode, the parent waits for the child to finish
     // If the shell is in parallel, no waits are used (i.e. as soon as the parent is run, another fork can be called if the
-    // next command is a system call.
-    // returns 1 if the shell should exit after executing the commands (i.e. a exit command was encountered)
+    // next command is a system call)
+    // Adds new forked processes to the process_list
+    // returns 1 if the shell should exit after executing the commands (i.e. a valid exit command was encountered)
     // returns 0 otherwise
-    // Uses some code from Lab 3 (Sam Daulton)
+    // Loosely uses some code from Lab 3 (Sam Daulton)
     char **cmd = NULL;
     int status = 0;
     int i = 0;
@@ -253,7 +257,13 @@ int run_cmds(char ***cl, int *p_mode, struct node *path_list, struct pid_node **
         cmd = cl[i];
         if (strcasecmp(cmd[0],"mode") == 0) {
             // MODE
-            new_mode = mode_cmd(cmd, p_mode);
+            if (*process_list != NULL) {
+                printf("Other processes are currently running.  Cannot change the mode.\n");
+                i++;
+                break;
+            } else {
+                new_mode = mode_cmd(cmd, p_mode);
+            }
         } else if (strcasecmp(cmd[0], "exit") == 0) {
             if (cmd[1] == NULL) {
                 // EXIT
@@ -331,31 +341,37 @@ int run_cmds(char ***cl, int *p_mode, struct node *path_list, struct pid_node **
                 // child process running
                 if (execv(cmd[0], cmd) < 0) {
                     //execv failed, print error and exit
-                    fprintf(stderr, "\nexecv failed on command: %s\nReason: %s\n", cmd[0], strerror(errno));
-                    printf("$: ");
-                    fflush(stdout);
+                    if(*p_mode == 1) {
+                        printf("\n");
+                    }
+                    fprintf(stderr, "execv failed on command: %s\nReason: %s\n", cmd[0], strerror(errno));
+                    if(*p_mode == 1) {
+                        print_prompt();
+                    }
                     exit(1);
                 }
             } else if (pid == -1) {
                 // fork failed
-                fprintf(stderr, "\nfork failed. command: %s not executed.\nReason: %s\n", cmd[0], strerror(errno));
+                if(*p_mode == 1) {
+                    printf("\n");
+                }
+                fprintf(stderr, "fork failed. command: %s not executed.\nReason: %s\n", cmd[0], strerror(errno));
                 num_children--;
             } else if (*p_mode == 0) {
                 // sequential mode: wait for child to finish
                 pid_t wait_rv = wait(&status);
                 if (wait_rv == -1) {
-                    fprintf(stderr, "\nwait failed on command: %s\nReason: %s\n", cmd[0], strerror(errno));
+                    fprintf(stderr, "wait failed on command: %s\nReason: %s\n", cmd[0], strerror(errno));
                 }
             } else {
                 // parallel mode:
-                //NEED TO CONCAT ENTIRE COMMAND
-                printf("Process: %d added to process_list\n", pid);
                 pid_list_append(pid, cmd[0], process_list);
             }
         }
         i++;
     }
     /*
+    // Used in Stage 1
     if (*p_mode == 1){
         // parallel mode
         // wait for all children to finish executing before printing shell prompt
@@ -367,7 +383,9 @@ int run_cmds(char ***cl, int *p_mode, struct node *path_list, struct pid_node **
     }
     */
 
-    //update mode for next input line
+    // update mode for next input line
+    // Note: new_mode is only different from *p_mode if valid mode command was entered
+    // here the command is valid only if the process list is empty
     *p_mode = new_mode;
     return ret_val;
 }
@@ -377,27 +395,30 @@ int main(int argc, char **argv) {
     int mode  = 0; // int indicating the current mode: 0 means sequential, 1 means parallel
     int will_exit = 0;  // int indicating if the shell should exit 0 means don't exit, 1 means exit
     printf("Welcome to the terminal! \n");
-    char prompt[] = "$: ";
     char ***cl = NULL;
     char buffer[1024];
 
     // create list of paths to check for each system command
-    FILE *datafile = fopen("shell-config", "r");
     struct node *path_list = NULL;
+    FILE *datafile = fopen("shell-config", "r");
     if (datafile == NULL) {
         printf("Error: Cannot find shell-config. Please use full path names only!\n");
-    }
-    else {
+    } else {
         path_list = path_list_creater(datafile);
+        if(fclose(datafile) != 0) {
+            fprintf(stderr, "Could not close shell-config file.  Reason: %s\n", strerror(errno));
+        }
     }
-
-    struct pid_node *process_list = NULL;
+    struct pid_node *process_list = NULL; // linked list storing info about current processes
 
     // print shell prompt
-    printf("%s", prompt);
-    fflush(stdout);
+    print_prompt();
+
+    // setup for checking process status
     int status = 0;
     pid_t pid = 0;
+    
+    // setup for polling stdin
     struct pollfd pfd[1];
     pfd[0].fd = 0;
     pfd[0].events = POLLIN;
@@ -414,8 +435,9 @@ int main(int argc, char **argv) {
             break;
         }
 
-        printf("%s", prompt);
-        fflush(stdout);
+        print_prompt();
+        // Note: process_list is NULL unless mode = parallel
+        // and there is a current child process (i.e. system command)
         while (process_list != NULL) {
             for (int i = 0; i < 10; i++) {
                 pid = waitpid(-1, &status, WNOHANG);
@@ -423,40 +445,40 @@ int main(int argc, char **argv) {
                     //waitpid failed
                     fprintf(stderr, "\nwaitpid failed\nReason: %s\n", strerror(errno));
                 } else if (pid > 0) {
-                    //waitpid returned a pid --> a process has terminated
+                    // waitpid returned a pid
+                    // process pid's state has changed
                     printf("\n");
                     if (WIFCONTINUED(status)) {
+                        // process resumed
                         pid_list_update(pid, &process_list, 2);
                     } else if (WIFSTOPPED(status)) {
+                        // process paused
                         pid_list_update(pid, &process_list, 1);
                     }
+                    // process completed
                     pid_list_update(pid, &process_list, 0);
-                    printf("%s", prompt);
-                    fflush(stdout);
+                    print_prompt();
                     if (process_list == NULL) {    
                         break;
                     }
-                } else {
-                    //printf("no state change\n");
                 }
             }
+            // poll for input on stdin
             poll_rv = poll(&pfd[0], 1, 1000);
             if (poll_rv < 0) {
                 fprintf(stderr, "\npoll failed\nReason: %s\n", strerror(errno));
-            } else if (poll_rv == 0) {
-                //printf("timeout\n");
-            } else {
-                //printf("\ntyped something on stdin\n");
+            } else if (poll_rv > 0) {
+                // user typed something on stdin
                 if (fgets(buffer, 1024, stdin) != NULL) {
+                    // not EOF
                     cl = cl_creator(buffer);
                     run_cmds(cl, &mode, path_list, &process_list);
                     free_cl(cl);
                 } else {
-                    // typed EOF
+                    // user typed EOF
                     printf("\nOther processes are currently running.  Cannot exit terminal.\n");
                 }
-                printf("%s", prompt);
-                fflush(stdout);
+                print_prompt(); 
             }
 
         }
@@ -465,11 +487,6 @@ int main(int argc, char **argv) {
     if (will_exit != 1) {
         printf("\n"); // just to make smooth transition out of our shell if EOF
     }
-
-    if (datafile != NULL) {
-        fclose(datafile);
-    }
-
     if (path_list != NULL) {
         list_clear(path_list);
     }

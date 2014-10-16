@@ -383,11 +383,13 @@ int main(int argc, char **argv) {
 
     // create list of paths to check for each system command
     FILE *datafile = fopen("shell-config", "r");
+    struct node *path_list = NULL;
     if (datafile == NULL) {
         printf("Error: Cannot find shell-config. Please use full path names only!\n");
     }
-    struct node *path_list;
-    path_list = path_list_creater(datafile);
+    else {
+        path_list = path_list_creater(datafile);
+    }
 
     struct pid_node *process_list = NULL;
 
@@ -463,8 +465,14 @@ int main(int argc, char **argv) {
     if (will_exit != 1) {
         printf("\n"); // just to make smooth transition out of our shell if EOF
     }
-    fclose(datafile);
-    list_clear(path_list);
+
+    if (datafile != NULL) {
+        fclose(datafile);
+    }
+
+    if (path_list != NULL) {
+        list_clear(path_list);
+    }
     return 0;
 }
 

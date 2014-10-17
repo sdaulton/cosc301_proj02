@@ -1,3 +1,20 @@
+/*
+    Sam Daulton, Bria Vicenti
+    16 Oct 2014
+    COSC 301 Project 2
+
+    Stage 1:
+    Bria wrote the code to tokenize commands, store them in a linked list data structure
+    and free the appropriate memory when finished.  
+    Sam wrote the code to run those commands in both parallel and sequential modes 
+    and create and clean up after the appropriate child processes.
+
+    Stage 2:
+    Bria wrote the code to support PATH variable.
+    Sam wrote the code to support background processes.
+*/
+
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -257,20 +274,16 @@ int run_cmds(char ***cl, int *p_mode, struct node *path_list, struct pid_node **
         cmd = cl[i];
         if (strcasecmp(cmd[0],"mode") == 0) {
             // MODE
+            new_mode = mode_cmd(cmd, p_mode);
             if (*process_list != NULL) {
                 printf("Other processes are currently running.  Cannot change the mode.\n");
-                i++;
-                break;
-            } else {
-                new_mode = mode_cmd(cmd, p_mode);
+                new_mode = *p_mode;
             }
         } else if (strcasecmp(cmd[0], "exit") == 0) {
             if (cmd[1] == NULL) {
                 // EXIT
                 if (*process_list != NULL) {
                     printf("Other processes are currently running.  Cannot exit terminal.\n");
-                    i++;
-                    break;
                 } else {
                     ret_val = 1;
                 }
@@ -283,10 +296,9 @@ int run_cmds(char ***cl, int *p_mode, struct node *path_list, struct pid_node **
                 // jobs
                 if (*process_list == NULL) {
                     printf("There are no processes currently running.\n");
-                    i++;
-                    break;
+                } else {
+                    pid_list_print(process_list);
                 }
-            pid_list_print(process_list);
             } else {
                 fprintf(stderr, "Invalid argument for jobs command\n");
             }
@@ -294,11 +306,8 @@ int run_cmds(char ***cl, int *p_mode, struct node *path_list, struct pid_node **
             // PAUSE
             if (cmd[1] == NULL) {
                 fprintf(stderr, "Need PID as argument for pause command\n");
-                if (*process_list == NULL) {
-                    printf("There are no processes currently.  Cannot pause\n");
-                }
-                i++;
-                break;
+            } else if (*process_list == NULL) {
+                printf("There are no processes currently.  Cannot pause\n");
             } else if (cmd[2] != NULL) {
                 fprintf(stderr, "Only one argument (PID) accepted by pause command\n");
             } else {
@@ -306,18 +315,17 @@ int run_cmds(char ***cl, int *p_mode, struct node *path_list, struct pid_node **
                 if (pid_list_update(atoi(cmd[1]), process_list, 1) == -1) {
                     printf("Process %d does not exist\n", atoi(cmd[1]));
                 } else {
-                    kill(atoi(cmd[1]), SIGSTOP);
+                    if ((kill(atoi(cmd[1]), SIGSTOP)) == -1) {
+                        fprintf(stderr, "kill failed on process: %s Reason %s\n", cmd[1], strerror(errno));
+                    }
                 }
             }
         } else if (strcasecmp(cmd[0], "resume") == 0) {
             // RESUME
             if (cmd[1] == NULL) {
                 fprintf(stderr, "Need PID as argument for resume command\n");
-                if (*process_list == NULL) {
-                    printf("There are no processes currently.  Cannot resume\n");
-                }
-                i++;
-                break;
+            } else if (*process_list == NULL) {
+                printf("There are no processes currently.  Cannot resume\n");
             } else if (cmd[2] != NULL) {
                 fprintf(stderr, "Only one argument (PID) accepted by the resume command\n");
             } else {
@@ -325,7 +333,9 @@ int run_cmds(char ***cl, int *p_mode, struct node *path_list, struct pid_node **
                 if (pid_list_update(atoi(cmd[1]), process_list, 2) == -1) {
                     printf("Process %d does not exist\n", atoi(cmd[1]));
                 } else {
-                    kill(atoi(cmd[1]), SIGCONT);
+                    if ((kill(atoi(cmd[1]), SIGCONT)) == -1) {
+                        fprintf(stderr, "kill failed on process: %s Reason %s\n", cmd[1], strerror(errno));
+                    }
                 }
             }
         } else {
